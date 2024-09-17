@@ -1,6 +1,5 @@
 #!/bin/bash
 
-# Check if an input file was provided
 if [ $# -ne 1 ]; then
     echo "Usage: $0 <source_file.b>"
     exit 1
@@ -24,7 +23,7 @@ clang "$BASE_NAME.ll" -O3 -o "${BASE_NAME}_O3.o"
 
 # Time the execution of the interpreter
 echo -e "\nTiming interpreter:"
-time "./bfi.o $INPUT_FILE" > /dev/null
+time ./bfi.o $INPUT_FILE > /dev/null
 
 # Time the execution of the unoptimized binary
 echo -e "\nTiming unoptimized binary ($BASE_NAME.o):"
