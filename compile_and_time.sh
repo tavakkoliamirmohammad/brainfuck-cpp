@@ -9,6 +9,9 @@ fi
 INPUT_FILE="$1"
 BASE_NAME=$(basename "$INPUT_FILE" .b)
 
+echo "Making sure the binaries are up-to-date"
+make 
+
 # Generate Native (ARM64) assembly from the Brainf*ck source file
 echo "Compiling $BASE_NAME to native code..."
 ./bfn_arm64.o $INPUT_FILE
