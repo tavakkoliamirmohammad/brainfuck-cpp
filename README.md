@@ -69,6 +69,12 @@ Ensure LLVM is installed on your system and that `llvm-config` is available in y
   clang++ -std=c++14 -O3 -o bfi.o bf_interpreter.cpp
   ```
 
+- **Brainfuck to ARM64 Compiler**
+
+```bash
+clang++ -std=c++14 -O3 -o bfn_arm64.o bf_native_arm64.cpp
+```
+
 - **Brainfuck to LLVM IR Compiler**
 
 ```bash
