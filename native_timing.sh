@@ -44,8 +44,6 @@ time_data=$(time_command ./${BASE_NAME}_optimize_all.o)
 echo "optimize-all,$time_data" >> "res/$CSV_FILE"
 
 # Clean up intermediate files
-rm "$BASE_NAME.ll"
-rm "$BASE_NAME.o"
 rm "${BASE_NAME}_optimize_all.o"
 rm "${BASE_NAME}_optimize_simple_loops.o"
 rm "${BASE_NAME}_optimize_memory_scans.o"

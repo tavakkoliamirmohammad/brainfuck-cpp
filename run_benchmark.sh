@@ -1,5 +1,6 @@
 #!/bin/bash
-
+make
+rm -rf res/*
 for file in "./benches"/*
 do
   if [ -f "$file" ]; then

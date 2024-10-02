@@ -112,25 +112,50 @@ public:
   }
 };
 
-// Optimized Memory Scan Loop class
 class OptimizedMemoryScan : public Instruction {
 public:
   int direction; // +1 for '>', -1 for '<'
   OptimizedMemoryScan(int dir) : direction(dir) {}
   void execute(std::ostream &output, int &label_counter) override {
-    int start_label = label_counter++;
-    int end_label = label_counter++;
+    int loop_label = label_counter++;
+    int found_label = label_counter++;
+    int not_found_label = label_counter++;
 
-    output << "L" << start_label << ":\n";
-    output << "\tLDRB W1, [X19]\n";
-    output << "\tCBZ W1, L" << end_label << "\n";
-    if (direction == 1) {
-      output << "\tADD X19, X19, #1\n";
-    } else {
-      output << "\tSUB X19, X19, #1\n";
-    }
-    output << "\tB L" << start_label << "\n";
-    output << "L" << end_label << ":\n";
+    // Set the scan direction
+    std::string direction_instr = (direction == 1) ? "ADD" : "SUB";
+    std::string offset = (direction == 1) ? "#16" : "#-16";
+
+    output << "\t// Optimized Memory Scan\n";
+    output << "L" << loop_label << ":\n";
+    output << "\t// Load 16 bytes into vector register V0\n";
+    output << "\tLD1 {V0.16B}, [X19]\n";
+    output << "\t// Compare bytes in V0 with zero\n";
+    output << "\tCMEQ V1.16B, V0.16B, #0\n";
+    output << "\t// Create index vector {0,1,...,15}\n";
+    output << "\tMOVI V2.16B, #0\n";
+    output << "\tADDV B2, V2.16B\n";
+    output << "\t// Mask indices where zero is found\n";
+    output << "\tBIC V3.16B, V2.16B, V1.16B\n";
+    output << "\t// Find the minimum index\n";
+    output << "\tUMINV B3, V3.16B\n";
+    output << "\t// Move the value from vector register B3 to general-purpose "
+              "register W3\n";
+    output << "\tUMOV W3, V3.B[0]\n";
+
+    output << "\t//Extend W3 into a 64-bit register\n";
+    output << "\tUXTW X3, W3\n ";
+
+    output << "\t// Check if zero was found\n";
+    output << "\tCMP W3, #255\n"; // 255 indicates no zero found
+    output << "\tB.EQ L" << not_found_label << "\n";
+    output << "\t// Zero found, adjust pointer\n";
+    output << "\tADD X19, X19, X3\n";
+    output << "\tB L" << found_label << "\n";
+    output << "L" << not_found_label << ":\n";
+    output << "\t// Move pointer and repeat\n";
+    output << "\t" << direction_instr << " X19, X19, " << offset << "\n";
+    output << "\tB L" << loop_label << "\n";
+    output << "L" << found_label << ":\n";
   }
 };
 
@@ -232,7 +257,7 @@ private:
       } else if (dynamic_cast<const DecrementDataPointer *>(instr.get())) {
         pointer -= 1;
       } else {
-        return false; // Contains instructions other than < or >
+        return false; // Contains instructions other than '<' or '>'
       }
     }
     if (pointer == 0) {
@@ -240,7 +265,7 @@ private:
     }
     // Check if net pointer movement is a power of 2
     int abs_pointer = std::abs(pointer);
-    return (abs_pointer != 0) && ((abs_pointer & (abs_pointer - 1)) == 0);
+    return (abs_pointer & (abs_pointer - 1)) == 0;
   }
 
   int getMemoryScanDirection() const {
