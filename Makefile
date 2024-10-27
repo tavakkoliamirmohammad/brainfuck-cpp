@@ -7,7 +7,7 @@ LLVM_CXXFLAGS := $(shell llvm-config --cxxflags)
 LLVM_LDFLAGS := $(shell llvm-config --ldflags --system-libs --libs core)
 
 # Targets
-all: bfi bfn_arm64 bfllvm
+all: bfi bfn_arm64 bfllvm bfn_pe
 
 # Interpreter
 bfi: bf_interpreter.cpp
@@ -16,6 +16,10 @@ bfi: bf_interpreter.cpp
 # ARM64 Compiler
 bfn_arm64: bf_native_arm64.cpp
 	$(CXX) $(CXXFLAGS) -o bfn_arm64.o bf_native_arm64.cpp
+
+# ARM64 Partial Evaluation Compiler
+bfn_pe: bf_pe.cpp
+	$(CXX) $(CXXFLAGS) -o bfn_pe_arm64.o bf_pe.cpp
 
 # LLVM IR Compiler
 bfllvm: bf_llvm.cpp
