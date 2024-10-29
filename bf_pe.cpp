@@ -253,13 +253,12 @@ public:
     }
 
     int loop_counter = 0;
-    const int MAX_LOOP_ITERATIONS = 10000000; // Prevent infinite loops
+    const int MAX_LOOP_ITERATIONS = 100000; // Prevent infinite loops
 
     while (cell.value != 0) {
       loop_counter++;
       if (loop_counter > MAX_LOOP_ITERATIONS) {
-        throw std::runtime_error(
-            "Possible infinite loop during partial evaluation");
+        return false;
       }
       for (auto &instr : instructions) {
         if (!instr->partialEvaluate(data_tape, data_ptr, output)) {
@@ -573,7 +572,8 @@ int main(int argc, char *argv[]) {
 
   // Output compile-time generated outputs
   for (char c : compile_time_output) {
-    output_file << "\tMOV W0, #" << static_cast<int>(static_cast<unsigned char>(c)) << "\n";
+    output_file << "\tMOV W0, #"
+                << static_cast<int>(static_cast<unsigned char>(c)) << "\n";
     output_file << "\tBL _putchar\n";
   }
 

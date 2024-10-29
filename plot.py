@@ -30,7 +30,7 @@ for csv_file in csv_files:
 plt.figure(figsize=(10, 6))
 
 n_benchmarks = len(all_data)
-n_modes = 4  # Assuming there are always 4 modes in each CSV
+n_modes = 2  # Assuming there are always 4 modes in each CSV
 bar_width = 0.2
 x_indices = np.arange(n_benchmarks)
 
