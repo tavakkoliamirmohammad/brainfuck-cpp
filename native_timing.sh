@@ -11,6 +11,15 @@ time_command() {
     { time "$@" > /dev/null; } 2>&1 | awk '/real/ {print $2}'
 }
 
+
+# Compilation with LLVM
+echo "Compiling $BASE_NAME with LLVM..."
+./bfllvm.o "$INPUT_FILE" &> "$BASE_NAME.ll"
+clang "$BASE_NAME.ll" -O3 -o "${BASE_NAME}_llvm.o"
+echo -e "\nTiming LLVM:"
+time_data=$(time_command ./${BASE_NAME}_llvm.o  < ./test.txt)
+echo "llvm,$time_data" >> "res/$CSV_FILE"
+
 # Compilation with no optimizations
 echo "Compiling $BASE_NAME with no optimizations..."
 ./bfn_arm64.o --no-optimizations "$INPUT_FILE"
@@ -43,19 +52,22 @@ echo "no-optimizations,$time_data" >> "res/$CSV_FILE"
 # time_data=$(time_command ./${BASE_NAME}_optimize_all.o)
 # echo "optimize-all,$time_data" >> "res/$CSV_FILE"
 
-# Compilation with partial evaluation
-echo "Compiling $BASE_NAME with partial evaluation..."
-./bfn_pe_arm64.o --no-optimizations "$INPUT_FILE"
-clang -O3 -o ${BASE_NAME}_pe.o output.s
-echo -e "\nTiming artial evaluation:"
-time_data=$(time_command ./${BASE_NAME}_pe.o < ./test.txt)
-echo "pe,$time_data" >> "res/$CSV_FILE"
+# # Compilation with partial evaluation
+# echo "Compiling $BASE_NAME with partial evaluation..."
+# ./bfn_pe_arm64.o --no-optimizations "$INPUT_FILE"
+# clang -O3 -o ${BASE_NAME}_pe.o output.s
+# echo -e "\nTiming artial evaluation:"
+# time_data=$(time_command ./${BASE_NAME}_pe.o < ./test.txt)
+# echo "pe,$time_data" >> "res/$CSV_FILE"
 
 # Clean up intermediate files
 # rm "${BASE_NAME}_optimize_all.o"
 # rm "${BASE_NAME}_optimize_simple_loops.o"
 # rm "${BASE_NAME}_optimize_memory_scans.o"
 rm "${BASE_NAME}_no_optimizations.o"
+rm "$BASE_NAME.ll"
+rm "$BASE_NAME_llvm.o"
+rm "${BASE_NAME}_O3.o"
 rm "${BASE_NAME}_pe.o"
 rm "output.s"
 

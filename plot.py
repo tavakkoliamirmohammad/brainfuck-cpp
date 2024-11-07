@@ -45,7 +45,7 @@ for i in range(n_modes):
 # Add labels and title for absolute times
 plt.xlabel('Benchmark')
 plt.ylabel('Real Time (milliseconds)')
-plt.title('Real Time for Different Optimization Levels Across Benchmarks')
+plt.title('Native Compiler vs LLVM Performance')
 plt.xticks(x_indices + bar_width * (n_modes - 1) / 2,
            [data[0] for data in all_data])  # Set benchmark names
 plt.legend(title='Optimization Mode', loc='best')

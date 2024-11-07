@@ -1,7 +1,7 @@
 #!/bin/bash
 make
-rm -rf res/*
-for file in "./benches"/*
+# rm -rf res/*
+for file in "./old_bnech"/*
 do
   if [ -f "$file" ]; then
     echo "Processing $file"

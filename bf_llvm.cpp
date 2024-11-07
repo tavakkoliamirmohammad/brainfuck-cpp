@@ -4,6 +4,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include <llvm/IR/IRBuilder.h>
@@ -15,6 +16,7 @@
 class Instruction {
 public:
   virtual ~Instruction() = default;
+  virtual void optimize() {}
   virtual void generateCode(llvm::IRBuilder<> &builder, llvm::Value *tape_ptr,
                             llvm::Module *module,
                             llvm::LLVMContext &context) = 0;
@@ -112,37 +114,134 @@ class Loop : public Instruction {
 public:
   std::vector<std::unique_ptr<Instruction>> instructions;
 
+  void optimize() override {
+    for (auto &instr : instructions) {
+      instr->optimize();
+    }
+  }
+
+  // Helper method to check if the loop is simple
+  bool isSimpleLoop() const {
+    int pointer_offset = 0;
+    std::unordered_map<int, int> cell_changes;
+    for (const auto &instr : instructions) {
+      if (dynamic_cast<const IncrementDataPointer *>(instr.get())) {
+        pointer_offset += 1;
+      } else if (dynamic_cast<const DecrementDataPointer *>(instr.get())) {
+        pointer_offset -= 1;
+      } else if (dynamic_cast<const IncrementByte *>(instr.get())) {
+        cell_changes[pointer_offset] += 1;
+      } else if (dynamic_cast<const DecrementByte *>(instr.get())) {
+        cell_changes[pointer_offset] -= 1;
+      } else {
+        // Contains I/O or nested loops
+        return false;
+      }
+    }
+    // Check net pointer movement
+    if (pointer_offset != 0)
+      return false;
+    // Check change to p[0]
+    auto it = cell_changes.find(0);
+    if (it == cell_changes.end() || it->second != -1)
+      return false;
+    // Loop is simple
+    return true;
+  }
+
   void generateCode(llvm::IRBuilder<> &builder, llvm::Value *tape_ptr,
                     llvm::Module *module, llvm::LLVMContext &context) override {
-    llvm::Function *function = builder.GetInsertBlock()->getParent();
+    if (isSimpleLoop()) {
+      // Generate optimized code for simple loop
+      generateOptimizedCode(builder, tape_ptr, module, context);
+    } else {
+      // Generate code for the loop as usual
+      llvm::Function *function = builder.GetInsertBlock()->getParent();
 
-    llvm::BasicBlock *loop_cond =
-        llvm::BasicBlock::Create(context, "loop_cond", function);
-    llvm::BasicBlock *loop_body =
-        llvm::BasicBlock::Create(context, "loop_body", function);
-    llvm::BasicBlock *loop_end =
-        llvm::BasicBlock::Create(context, "loop_end", function);
+      llvm::BasicBlock *loop_cond =
+          llvm::BasicBlock::Create(context, "loop_cond", function);
+      llvm::BasicBlock *loop_body =
+          llvm::BasicBlock::Create(context, "loop_body", function);
+      llvm::BasicBlock *loop_end =
+          llvm::BasicBlock::Create(context, "loop_end", function);
 
-    builder.CreateBr(loop_cond);
+      builder.CreateBr(loop_cond);
 
-    // Loop condition
-    builder.SetInsertPoint(loop_cond);
+      // Loop condition
+      builder.SetInsertPoint(loop_cond);
+      llvm::Value *ptr = builder.CreateLoad(builder.getInt8Ty()->getPointerTo(),
+                                            tape_ptr, "ptr");
+      llvm::Value *val = builder.CreateLoad(builder.getInt8Ty(), ptr, "val");
+      llvm::Value *cond =
+          builder.CreateICmpNE(val, builder.getInt8(0), "loop_cond");
+      builder.CreateCondBr(cond, loop_body, loop_end);
+
+      // Loop body
+      builder.SetInsertPoint(loop_body);
+      for (const auto &instr : instructions) {
+        instr->generateCode(builder, tape_ptr, module, context);
+      }
+      builder.CreateBr(loop_cond);
+
+      // After loop
+      builder.SetInsertPoint(loop_end);
+    }
+  }
+
+private:
+  void generateOptimizedCode(llvm::IRBuilder<> &builder, llvm::Value *tape_ptr,
+                             llvm::Module *module, llvm::LLVMContext &context) {
+    // Compute cell changes
+    int pointer_offset = 0;
+    std::unordered_map<int, int> cell_changes;
+    for (const auto &instr : instructions) {
+      if (dynamic_cast<const IncrementDataPointer *>(instr.get())) {
+        pointer_offset += 1;
+      } else if (dynamic_cast<const DecrementDataPointer *>(instr.get())) {
+        pointer_offset -= 1;
+      } else if (dynamic_cast<const IncrementByte *>(instr.get())) {
+        cell_changes[pointer_offset] += 1;
+      } else if (dynamic_cast<const DecrementByte *>(instr.get())) {
+        cell_changes[pointer_offset] -= 1;
+      }
+    }
+
+    // Generate code
     llvm::Value *ptr = builder.CreateLoad(builder.getInt8Ty()->getPointerTo(),
                                           tape_ptr, "ptr");
-    llvm::Value *val = builder.CreateLoad(builder.getInt8Ty(), ptr, "val");
-    llvm::Value *cond =
-        builder.CreateICmpNE(val, builder.getInt8(0), "loop_cond");
-    builder.CreateCondBr(cond, loop_body, loop_end);
+    llvm::Value *p0 = builder.CreateLoad(builder.getInt8Ty(), ptr, "p0");
+    llvm::Value *p0_i32 =
+        builder.CreateZExt(p0, builder.getInt32Ty(), "p0_i32");
 
-    // Loop body
-    builder.SetInsertPoint(loop_body);
-    for (const auto &instr : instructions) {
-      instr->generateCode(builder, tape_ptr, module, context);
+    for (const auto &change : cell_changes) {
+      int offset = change.first;
+      int per_iter_change = change.second;
+      if (offset == 0)
+        continue; // We'll set p[0] to zero later
+
+      llvm::Value *offset_val = builder.getInt32(offset);
+      llvm::Value *cell_ptr = builder.CreateInBoundsGEP(
+          builder.getInt8Ty(), ptr, offset_val, "cell_ptr");
+
+      llvm::Value *cell_val = builder.CreateLoad(builder.getInt8Ty(), cell_ptr);
+      llvm::Value *cell_val_i32 =
+          builder.CreateZExt(cell_val, builder.getInt32Ty(), "cell_val_i32");
+
+      llvm::Value *change_val =
+          builder.getInt32(per_iter_change); // per_iter_change * p0_i32
+      llvm::Value *total_change =
+          builder.CreateMul(change_val, p0_i32, "total_change");
+
+      llvm::Value *new_cell_val_i32 =
+          builder.CreateAdd(cell_val_i32, total_change, "new_cell_val_i32");
+
+      llvm::Value *new_cell_val = builder.CreateTrunc(
+          new_cell_val_i32, builder.getInt8Ty(), "new_cell_val");
+      builder.CreateStore(new_cell_val, cell_ptr);
     }
-    builder.CreateBr(loop_cond);
 
-    // After loop
-    builder.SetInsertPoint(loop_end);
+    // Set p[0] to zero
+    builder.CreateStore(builder.getInt8(0), ptr);
   }
 };
 
@@ -187,6 +286,13 @@ std::vector<std::unique_ptr<Instruction>> parse(const std::string &code,
   return instructions;
 }
 
+void optimizeInstructions(
+    std::vector<std::unique_ptr<Instruction>> &instructions) {
+  for (auto &instr : instructions) {
+    instr->optimize();
+  }
+}
+
 int main(int argc, char *argv[]) {
   // Read Brainfuck code from a file or standard input
   std::string code;
@@ -214,6 +320,9 @@ int main(int argc, char *argv[]) {
     std::cerr << "Error while parsing: " << e.what() << '\n';
     return 1;
   }
+
+  // Optimize instructions
+  optimizeInstructions(instructions);
 
   // Initialize LLVM
   llvm::LLVMContext context;
